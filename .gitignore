@@ -221,3 +221,7 @@ __marimo__/
 
 # dataset
 data
+
+# weight, model
+*.pt 
+*.pth
