@@ -11,17 +11,13 @@ class OverFeatDetector(nn.Module):
         self.backbone = timm.create_model(model_name='resnet18.a1_in1k', pretrained=True)
         self.backbone.global_pool = nn.Identity()
         self.backbone.fc = nn.Identity()
-        self.ConvLayer = nn.Sequential(
-            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=7, stride = 1),
-            nn.ReLU(inplace=True)
-        )
-        self.act_fn = nn.ReLU(inplace=True)
+        self.PoolingLayer = nn.AvgPool2d(kernel_size=7, stride=1)
         self.classifier_head = nn.Conv2d(in_channels=512, out_channels= num_classes, kernel_size=1, stride = 1)
         self.Regression_bbx_head = nn.Conv2d(in_channels=512, out_channels=4, kernel_size=1, stride =1)
     
     def forward(self,x:torch.Tensor)->tuple[torch.Tensor, torch.Tensor]:
         x = self.backbone.forward_features(x)
-        x = self.ConvLayer(x)
+        x = self.PoolingLayer(x)
 
         box_deltas = self.Regression_bbx_head(x) # dự đoán độ lệch box giữa anchor và GT_boxes
         logits = self.classifier_head(x) # Phân loại các ROI - Patch ảnh
@@ -29,7 +25,7 @@ class OverFeatDetector(nn.Module):
     
 
 
-    # Tọa giả định vị trí ban đầu của bouding box chính là vị trí các ROI ảnh
+    # Tọa giả định vị trí ban đầu của bouding box của từng ROI - patch ảnh là vị trí của sliding window
     def make_anchors(self, O_h:int, O_w:int, batch_size: int, stride = 32, window_size = 224):
         '''
         O_h: chiều cao của bản đồ feature map
@@ -55,13 +51,14 @@ class OverFeatDetector(nn.Module):
     
     # tính độ lệch box_delta trên các vùng dương giữa anchor và GT_box
     def encode_delta(self, anchor: torch.tensor, gt_box: torch.tensor)-> torch.tensor:
-        w_anchor, h_anchor = anchor[:,:,2]-anchor[:,:,0], anchor[:,:,3]-anchor[:,:,1] # w_anchor shape(B, M)
-        xcenter_anchor, ycenter_anchor = anchor[:,:,0] + 0.5*w_anchor, anchor[:,:,1] + 0.5*h_anchor
+        w_anchor, h_anchor = anchor[...,2]-anchor[...,0], anchor[...,3]-anchor[...,1] # w_anchor shape(B, M)
+        xcenter_anchor, ycenter_anchor = anchor[...,0] + 0.5*w_anchor, anchor[...,1] + 0.5*h_anchor
 
-        w_gt, h_gt = gt_box[:,:,2]-gt_box[:,:,0], gt_box[:,:,3]-gt_box[:,:,1]
-        xcenter_gt, ycenter_gt = gt_box[:,:,0] + 0.5*w_gt, gt_box[:,:,1] + 0.5*h_gt
+        w_gt, h_gt = gt_box[...,2]-gt_box[...,0], gt_box[...,3]-gt_box[...,1]
+        xcenter_gt, ycenter_gt = gt_box[...,0] + 0.5*w_gt, gt_box[...,1] + 0.5*h_gt
 
-        return torch.stack([(xcenter_gt-xcenter_anchor)/w_anchor, (ycenter_gt-ycenter_anchor)/h_anchor, torch.log(w_gt/w_anchor), torch.log(h_gt/h_anchor)], dim =2)
+        # shape (B, M, 4)
+        return torch.stack([(xcenter_gt-xcenter_anchor)/w_anchor, (ycenter_gt-ycenter_anchor)/h_anchor, torch.log(w_gt/w_anchor), torch.log(h_gt/h_anchor)], dim =-1)
     
     # Giải mã độ lệch box_delta mà mô hình dự đoán để trả về tọa độ bounding box thực tế [xmin, ymin, xmax, ymax]
     def decode_delta(self, anchor: torch.Tensor, delta: torch.Tensor) -> torch.Tensor:
@@ -112,42 +109,33 @@ class OverFeatDetector(nn.Module):
         device = anchors.device
         labels = torch.zeros((B, M), dtype=torch.int64, device=device) # mặc định gán class của các anchors là nền - background
         target_delta_bbx = torch.zeros((B, M, 4), dtype=torch.float32, device=device)
+        area_anchors = (anchors[...,2] - anchors[...,0]) * (anchors[...,3] - anchors[...,1])
+        area_gts = (GT_boxes[...,2] - GT_boxes[...,0]) * (GT_boxes[...,3] - GT_boxes[...,1])
 
-        for b in range(B):
-            anchors_b = anchors[b]  # (M, 4)
+        left_top = torch.max(anchors[:,:,None, :2], GT_boxes[:, None, :, :2]) # [B, M, N, 2]
+        right_bottom = torch.min(anchors[:,:,None, 2:], GT_boxes[:, None, :, 2:]) # [B, M, N, 2]
 
-            # Lọc các GT boxes hợp lệ của ảnh thứ b (loại bỏ padding)
-            if mask_GT_boxes is not None:
-                valid_mask = mask_GT_boxes[b].bool()
-                gt_boxes_b = GT_boxes[b][valid_mask]
-                gt_labels_b = GT_labels[b][valid_mask]
-            else:
-                gt_boxes_b = GT_boxes[b]
-                gt_labels_b = GT_labels[b]
+        # Tính IoU 
+        intersection = torch.clamp(right_bottom - left_top, min=0)  # (B, M, N, 2)
+        intersection = intersection[:,:,:,0] * intersection[:,:,:,1]  # (B, M, N)
 
-            if gt_boxes_b.shape[0] == 0:
-                continue
+        iou = intersection/(area_anchors[:, :, None] + area_gts[:, None, :] - intersection)  # (B, M, N)
 
-            # Tính IoU giữa M anchors và K GT boxes thật: shape (M, K)
-            iou_score_matrix = box_iou(anchors_b, gt_boxes_b)
-            max_iou_score, idx_max = torch.max(iou_score_matrix, dim=1)  # (M,)
+        mask_GT_boxes = mask_GT_boxes.unsqueeze(1).repeat(1, M, 1) # (B, M, N)
+        iou_max, idx_best_gt = torch.max(iou*mask_GT_boxes, dim=2, keepdim = False) #(B, M)
 
-            positive_mask = max_iou_score >= positive_threshold
-            ignore_mask = (max_iou_score > negative_threshold) & (max_iou_score < positive_threshold)
+        positive_mask = iou_max >= positive_threshold
+        ignore_mask = (iou_max > negative_threshold) & (iou_max < positive_threshold)
 
-            # Gán nhãn ignore = -1
-            labels[b, ignore_mask] = -1
 
-            # Gán nhãn và tính delta cho positive anchors
-            if positive_mask.any():
-                labels[b, positive_mask] = gt_labels_b[idx_max[positive_mask]].long()
+        matched_labels = torch.gather(GT_labels, 1, idx_best_gt) # (B, M)
+        matched_boxes  = torch.gather(GT_boxes, 1, idx_best_gt[..., None].expand(-1, -1, 4)) # (B, M, 4)
 
-                pos_anchors = anchors_b[positive_mask].unsqueeze(0)  # shape (1, num_pos, 4)
-                matched_gt = gt_boxes_b[idx_max[positive_mask]].unsqueeze(0)  # shape (1, num_pos, 4)
-                target_delta_bbx[b, positive_mask] = self.encode_delta(pos_anchors, matched_gt).squeeze(0)
+        labels[positive_mask] = matched_labels[positive_mask]
+        labels[ignore_mask] = -1
+        target_delta_bbx[positive_mask] = self.encode_delta(anchors[positive_mask], matched_boxes[positive_mask])
 
         return labels, target_delta_bbx
-
 
 class TrainModel(nn.Module):
     def __init__(self, model: nn.Module, dataloader: torch.utils.data.DataLoader, n_epochs: int = 30, learning_rate: float = 0.001, batch_size: int = 32)->None:
@@ -156,7 +144,6 @@ class TrainModel(nn.Module):
         self.model = model.to(self.device)
         self.optimizer = torch.optim.Adam([
             {'params': self.model.backbone.parameters(), 'lr': learning_rate/10, 'weight_decay': 0.0005},
-            {'params': self.model.ConvLayer.parameters(), 'lr': learning_rate, 'weight_decay': 0.0005},
             {'params': self.model.classifier_head.parameters(), 'lr': learning_rate, 'weight_decay': 0.0005},
             {'params': self.model.Regression_bbx_head.parameters(), 'lr': learning_rate, 'weight_decay': 0.0005}
         ])

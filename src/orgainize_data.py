@@ -40,7 +40,7 @@ def collate_fn(batch):
     Wmax = max(img.shape[2] for img in imgs)
     num_boxes_max = max(len(target['boxes']) for target in targets)
     GT_boxes = torch.zeros(len(imgs), num_boxes_max, 4)
-    GT_labels = torch.zeros(len(imgs), num_boxes_max)
+    GT_labels = torch.zeros(len(imgs), num_boxes_max, dtype=torch.long)
     mask_GT_boxes = torch.zeros(len(imgs), num_boxes_max, dtype = torch.bool)
     
     for i, target in enumerate(targets):
