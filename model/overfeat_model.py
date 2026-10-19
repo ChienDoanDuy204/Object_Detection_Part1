@@ -4,10 +4,12 @@ import timm
 from torchvision.ops import box_iou
 from tqdm import tqdm
 from torch.amp import GradScaler
-
+import torch.nn.functional as F
+from torchvision.ops import batched_nms
 class OverFeatDetector(nn.Module):
     def __init__(self, num_classes:int = 1000)->None:
         super().__init__()
+        self.num_classes = num_classes
         self.backbone = timm.create_model(model_name='resnet18.a1_in1k', pretrained=True)
         self.backbone.global_pool = nn.Identity()
         self.backbone.fc = nn.Identity()
@@ -19,8 +21,8 @@ class OverFeatDetector(nn.Module):
         x = self.backbone.forward_features(x)
         x = self.PoolingLayer(x)
 
-        box_deltas = self.Regression_bbx_head(x) # dự đoán độ lệch box giữa anchor và GT_boxes
-        logits = self.classifier_head(x) # Phân loại các ROI - Patch ảnh
+        box_deltas = self.Regression_bbx_head(x) # dự đoán độ lệch box giữa anchor và GT_boxes - shape (B, 4, H, W)
+        logits = self.classifier_head(x) # Phân loại các ROI - Patch ảnh - shape (B, C, H, W)
         return logits, box_deltas
     
 
@@ -125,6 +127,7 @@ class OverFeatDetector(nn.Module):
         iou_max, idx_best_gt = torch.max(iou*mask_GT_boxes, dim=2, keepdim = False) #(B, M)
 
         positive_mask = iou_max >= positive_threshold
+        # mặt nạ bỏ qua vị trí có iou nằm giữa positive_threshold và negative_threshold
         ignore_mask = (iou_max > negative_threshold) & (iou_max < positive_threshold)
 
 
@@ -136,6 +139,62 @@ class OverFeatDetector(nn.Module):
         target_delta_bbx[positive_mask] = self.encode_delta(anchors[positive_mask], matched_boxes[positive_mask])
 
         return labels, target_delta_bbx
+    
+    # NMS
+    def NMS(self,logits: torch.tensor, delta_boxes: torch.tensor, iou_threshold: float = 0.6, confidence_threshold: float = 0.01, gamma: float = 0.7)-> torch.tensor:
+        B = logits.shape[0]
+        C = self.num_classes
+        anchors = self.make_anchors(logits.shape[2], logits.shape[3], batch_size=B) # (B, M, 4)
+        pred_boxes = self.decode_delta(anchors, delta_boxes) # (B, M, 4)
+        pred_scores = F.softmax(logits, dim=1) # (B, C, H, W)
+        pred_scores = pred_scores.view(B, C, -1)
+        confidence_score, index = torch.max(pred_scores, dim = 1) # (B, M)
+
+        KEEP = batched_nms(pred_boxes[index].view(-1, 4), confidence_score.view(-1), idxs= index.view(-1), iou_threshold=iou_threshold)
+        return KEEP
+
+    @staticmethod
+    def get_pyramid_scales(
+        orig_h: int,
+        orig_w: int,
+        pyramid_type: str = 'both',
+        scale_factor: float = 1.414,
+        max_scale: float = 2.0,
+        min_size: tuple = (224, 224),
+        max_size: tuple = (1000, 1000)
+    ) -> list:
+        """
+        Calculates valid pyramid scale factors according to pyramid_type ('both', 'up', 'down', 'none').
+        Ensures all scaled dimensions respect min_size (>= 224x224 for OverFeat sliding window) and max_size.
+        """
+        if pyramid_type == 'none':
+            return [1.0]
+
+        factors = [1.0]
+
+        # 1. Up Pyramid (Upscale for detecting smaller objects)
+        if pyramid_type in ('up', 'both'):
+            curr_factor = scale_factor
+            while True:
+                h, w = int(orig_h * curr_factor), int(orig_w * curr_factor)
+                if curr_factor > max_scale or h > max_size[0] or w > max_size[1]:
+                    break
+                factors.append(round(curr_factor, 3))
+                curr_factor *= scale_factor
+
+        # 2. Down Pyramid (Downscale for detecting larger objects)
+        if pyramid_type in ('down', 'both'):
+            curr_factor = 1.0 / scale_factor
+            while True:
+                h, w = int(orig_h * curr_factor), int(orig_w * curr_factor)
+                if h < min_size[0] or w < min_size[1]:
+                    break
+                factors.append(round(curr_factor, 3))
+                curr_factor /= scale_factor
+
+        return sorted(list(set(factors)))
+
+
 
 class TrainModel(nn.Module):
     def __init__(self, model: nn.Module, dataloader: torch.utils.data.DataLoader, n_epochs: int = 30, learning_rate: float = 0.001, batch_size: int = 32)->None:

@@ -1,0 +1,244 @@
+{
+  "mAP_05": 0.1744,
+  "mean_tp_iou": 0.6631,
+  "total_eval_images": 500,
+  "total_eval_time_sec": 8.11,
+  "throughput_fps": 61.6,
+  "latency_ms": {
+    "mean": 14.6,
+    "median": 12.69,
+    "p95": 25.92,
+    "min": 9.35,
+    "max": 249.01
+  },
+  "model_complexity": {
+    "total_parameters": 11189337,
+    "backbone_parameters": 11176512,
+    "classifier_head_parameters": 10773,
+    "regression_head_parameters": 2052,
+    "checkpoint_size_mb": 42.76,
+    "device": "cuda"
+  },
+  "error_distribution": {
+    "true_positives": 233,
+    "false_positives_localization": 249,
+    "false_positives_background": 41
+  },
+  "size_recall": {
+    "small": {
+      "gt_count": 92,
+      "detected": 0,
+      "recall": 0.0
+    },
+    "medium": {
+      "gt_count": 398,
+      "detected": 0,
+      "recall": 0.0
+    },
+    "large": {
+      "gt_count": 779,
+      "detected": 233,
+      "recall": 0.2991
+    }
+  },
+  "per_class": {
+    "aeroplane": {
+      "ap": 0.0909,
+      "precision": 0.6,
+      "recall": 0.0882,
+      "f1": 0.1538,
+      "n_gt": 34,
+      "n_pred": 5,
+      "tp_count": 3,
+      "fp_count": 2
+    },
+    "bicycle": {
+      "ap": 0.1273,
+      "precision": 0.375,
+      "recall": 0.1667,
+      "f1": 0.2308,
+      "n_gt": 36,
+      "n_pred": 16,
+      "tp_count": 6,
+      "fp_count": 10
+    },
+    "bird": {
+      "ap": 0.2203,
+      "precision": 0.5,
+      "recall": 0.25,
+      "f1": 0.3333,
+      "n_gt": 48,
+      "n_pred": 24,
+      "tp_count": 12,
+      "fp_count": 12
+    },
+    "boat": {
+      "ap": 0.0682,
+      "precision": 0.2667,
+      "recall": 0.0976,
+      "f1": 0.1429,
+      "n_gt": 41,
+      "n_pred": 15,
+      "tp_count": 4,
+      "fp_count": 11
+    },
+    "bottle": {
+      "ap": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "n_gt": 34,
+      "n_pred": 0
+    },
+    "bus": {
+      "ap": 0.2182,
+      "precision": 0.2667,
+      "recall": 0.2105,
+      "f1": 0.2353,
+      "n_gt": 19,
+      "n_pred": 15,
+      "tp_count": 4,
+      "fp_count": 11
+    },
+    "car": {
+      "ap": 0.1329,
+      "precision": 0.4118,
+      "recall": 0.1795,
+      "f1": 0.25,
+      "n_gt": 117,
+      "n_pred": 51,
+      "tp_count": 21,
+      "fp_count": 30
+    },
+    "cat": {
+      "ap": 0.3689,
+      "precision": 0.5556,
+      "recall": 0.4054,
+      "f1": 0.4688,
+      "n_gt": 37,
+      "n_pred": 27,
+      "tp_count": 15,
+      "fp_count": 12
+    },
+    "chair": {
+      "ap": 0.0909,
+      "precision": 0.3333,
+      "recall": 0.0238,
+      "f1": 0.0444,
+      "n_gt": 84,
+      "n_pred": 6,
+      "tp_count": 2,
+      "fp_count": 4
+    },
+    "cow": {
+      "ap": 0.0909,
+      "precision": 0.25,
+      "recall": 0.0417,
+      "f1": 0.0714,
+      "n_gt": 24,
+      "n_pred": 4,
+      "tp_count": 1,
+      "fp_count": 3
+    },
+    "diningtable": {
+      "ap": 0.0909,
+      "precision": 0.1667,
+      "recall": 0.04,
+      "f1": 0.0645,
+      "n_gt": 25,
+      "n_pred": 6,
+      "tp_count": 1,
+      "fp_count": 5
+    },
+    "dog": {
+      "ap": 0.407,
+      "precision": 0.4138,
+      "recall": 0.48,
+      "f1": 0.4444,
+      "n_gt": 50,
+      "n_pred": 58,
+      "tp_count": 24,
+      "fp_count": 34
+    },
+    "horse": {
+      "ap": 0.397,
+      "precision": 0.4722,
+      "recall": 0.4857,
+      "f1": 0.4789,
+      "n_gt": 35,
+      "n_pred": 36,
+      "tp_count": 17,
+      "fp_count": 19
+    },
+    "motorbike": {
+      "ap": 0.1842,
+      "precision": 0.45,
+      "recall": 0.2903,
+      "f1": 0.3529,
+      "n_gt": 31,
+      "n_pred": 20,
+      "tp_count": 9,
+      "fp_count": 11
+    },
+    "person": {
+      "ap": 0.1605,
+      "precision": 0.4837,
+      "recall": 0.1824,
+      "f1": 0.2649,
+      "n_gt": 488,
+      "n_pred": 186,
+      "tp_count": 89,
+      "fp_count": 95
+    },
+    "pottedplant": {
+      "ap": 0.0455,
+      "precision": 0.3333,
+      "recall": 0.0185,
+      "f1": 0.0351,
+      "n_gt": 54,
+      "n_pred": 3,
+      "tp_count": 1,
+      "fp_count": 2
+    },
+    "sheep": {
+      "ap": 0.1818,
+      "precision": 0.4,
+      "recall": 0.1,
+      "f1": 0.16,
+      "n_gt": 20,
+      "n_pred": 5,
+      "tp_count": 2,
+      "fp_count": 3
+    },
+    "sofa": {
+      "ap": 0.2597,
+      "precision": 0.28,
+      "recall": 0.2692,
+      "f1": 0.2745,
+      "n_gt": 26,
+      "n_pred": 30,
+      "tp_count": 7,
+      "fp_count": 18
+    },
+    "train": {
+      "ap": 0.19,
+      "precision": 0.2778,
+      "recall": 0.3448,
+      "f1": 0.3077,
+      "n_gt": 29,
+      "n_pred": 36,
+      "tp_count": 10,
+      "fp_count": 26
+    },
+    "tvmonitor": {
+      "ap": 0.1636,
+      "precision": 0.1389,
+      "recall": 0.1351,
+      "f1": 0.137,
+      "n_gt": 37,
+      "n_pred": 36,
+      "tp_count": 5,
+      "fp_count": 31
+    }
+  }
+}
